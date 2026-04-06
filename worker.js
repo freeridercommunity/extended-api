@@ -1,3 +1,5 @@
+import { respondWithError } from "./utils.js";
+
 function _glob(path) {
 	if (path.includes('?')) path = path.replace(/\?$/g, '.');
 	if (path.includes('*')) {
@@ -31,6 +33,12 @@ const Worker = {
 		}
 
 		const url = new URL(req.url);
+		if (url.pathname === '/') {
+			return Response.redirect("https://github.com/freeridercommunity/extended-api", 302);
+		} else if (url.pathname === '/api') {
+			return Response.redirect("https://github.com/freeridercommunity/extended-api/wiki", 302);
+		}
+
 		const path = url.pathname.slice(Number(url.pathname.startsWith('/')), url.pathname.endsWith('/') ? -1 : url.pathname.length);
 
 		// const saveData = 'on' === req.headers.get('Save-Data');
@@ -68,36 +76,20 @@ const Worker = {
 					status: 200
 				});
 			} catch (err) {
+				if (err instanceof Response) return err;
+
 				console.error(err);
-				return new Response(JSON.stringify({
-					error: {
-						code: "Internal Server Error",
-						message: err.message || "Unspecified error"
-					},
-					status: 500
-				}), {
-					headers: {
-						...corsHeaders,
-						'Content-Type': 'application/json'
-					},
-					status: 500
-				});
+				return respondWithError({
+					code: "Internal Server Error",
+					message: err.message || "Unspecified error"
+				}, 500);
 			}
 		}
 
-		return new Response(JSON.stringify({
-			error: {
-				code: "Not Found",
-				message: `Endpoint does not exist: ${path}`
-			},
-			status: 404
-		}), {
-			headers: {
-				...corsHeaders,
-				'Content-Type': 'application/json'
-			},
-			status: 404
-		})
+		return respondWithError({
+			code: "Not Found",
+			message: `Endpoint does not exist: ${path}`
+		}, 404)
 	},
 
 	_route(method = 'GET', path) {
@@ -171,6 +163,9 @@ function lazyRoute(method, path, modulePath, handlerName = 'default') {
 }
 
 // Create bulk request options due to Cloudflare request limit
+
+// Auth routes
+lazyRoute('POST', 'api/auth/asr', 'endpoints/auth/asr');
 
 // Track routes
 lazyRoute('DELETE', 'api/tracks/:id', 'endpoints/tracks/hide');

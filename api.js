@@ -20,8 +20,21 @@ export default function api(endpoint = '', opts = null, asr) {
 		searchParams.set('app_signed_request', asr);
 	}
 
-	const method = opts?.method || 'GET';
-	if (method === 'GET' && opts?.body instanceof Object) {
+	let verbatim = false;
+
+	const options = {
+		headers: { 'User-Agent': "Mozilla/5.0 (Windows NT 10.0) Chrome/120 Cloudflare Worker" }
+	};
+
+	const method = opts?.method.toUpperCase() || 'GET';
+	if (method != 'GET') {
+		options.method = method;
+	} else if (opts?.body instanceof Object) {
+		if (opts.body.verbatim) {
+			verbatim = true;
+			delete opts.body.verbatim;
+		}
+
 		for (const [key, value] of Object.entries(opts.body)) {
 			searchParams.set(key, value);
 		}
@@ -31,18 +44,16 @@ export default function api(endpoint = '', opts = null, asr) {
 		if (Object.keys(opts).length < 1) opts = null;
 	}
 
-	const args = [BASE_URL + endpoint + '?' + searchParams.toString()];
+	const args = [BASE_URL + endpoint + '?' + searchParams.toString(), options];
 
-	if (opts instanceof Object) {
-		const options = { method };
-
-		if (opts.body instanceof Object) {
-			options.headers ||= {};
-			options.headers['Content-Type'] = "application/x-www-form-urlencoded";
-			options.body = new URLSearchParams(opts.body);
+	if (opts instanceof Object && opts.body instanceof Object) {
+		if (opts.body.verbatim) {
+			verbatim = true;
+			delete opts.body.verbatim;
 		}
 
-		args.push(options);
+		options.headers['Content-Type'] = "application/x-www-form-urlencoded";
+		options.body = new URLSearchParams(opts.body);
 	}
 
 	// console.debug(...args);
@@ -56,18 +67,22 @@ export default function api(endpoint = '', opts = null, asr) {
 			return r.json()
 		})
 		.then(r => {
-			if (r.code >= 400 || r.result === false) {
+			if ((r.code >= 400 || r.result === false) && !Array.isArray(r.data)) {
 				throw new Error(r.msg || "Request was unsuccessful");
 			}
 
+			if (verbatim) return r;
 			return r.data ?? r
 		})
 }
 
-export function assertToken(token) {
+export async function assertToken(token) {
 	return api('account/settings', null, token)
 		.then(r => ({
+			admin: r.user.admin,
 			id: r.user.u_id,
+			moderator: r.user.moderator,
+			plus: r.user.plus,
 			username: r.user.u_name
 		}))
 		.catch(err => null)
