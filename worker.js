@@ -53,7 +53,10 @@ const Worker = {
 			try {
 				let result = route(req, env, ctx);
 				if (result instanceof Promise) result = await result;
-				if (!result) return new Response(null, { status: 204 });
+				if (!result) return new Response(null, {
+					headers: corsHeaders,
+					status: 204
+				});
 				if (result instanceof Response) {
 					for (const key in corsHeaders) {
 						if (result.headers.has(key)) continue;
@@ -76,20 +79,29 @@ const Worker = {
 					status: 200
 				});
 			} catch (err) {
-				if (err instanceof Response) return err;
-
-				console.error(err);
-				return respondWithError({
+				const res =	err instanceof Response ? err : respondWithError({
 					code: "Internal Server Error",
 					message: err.message || "Unspecified error"
 				}, 500);
+				for (const key in corsHeaders) {
+					if (res.headers.has(key)) continue;
+					res.headers.set(key, corsHeaders[key]);
+				}
+
+				return res;
 			}
 		}
 
-		return respondWithError({
+		const res = respondWithError({
 			code: "Not Found",
 			message: `Endpoint does not exist: ${path}`
-		}, 404)
+		}, 404);
+		for (const key in corsHeaders) {
+			if (res.headers.has(key)) continue;
+			res.headers.set(key, corsHeaders[key]);
+		}
+
+		return res
 	},
 
 	_route(method = 'GET', path) {
